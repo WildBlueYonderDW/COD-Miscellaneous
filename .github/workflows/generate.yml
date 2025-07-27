@@ -29,10 +29,6 @@ jobs:
       - name: Build release executable
         run: cargo build --release --bin ${{ env.EXE_NAME }}
 
-      - name: List build artifacts (for debugging)
-        run: ls -R target/release
-        shell: bash
-
       - name: Run application to generate artifacts
         id: run_app
         shell: bash
@@ -71,7 +67,7 @@ jobs:
             echo "zip_created=false" >> "$GITHUB_OUTPUT"
           else
             # Use the zip command, which is standard on Ubuntu runners
-            zip hash_pkg.zip "${cdb_files[@]}"
+            zip -j hash_pkg.zip "${cdb_files[@]}"
             echo "zip_created=true" >> "$GITHUB_OUTPUT"
             echo "Successfully created hash_pkg.zip"
           fi
