@@ -1,0 +1,92 @@
+name: Build and Release Rust Artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'csv/**'
+
+env:
+  EXE_NAME: NameIndex
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Build release executable
+        run: cargo build --release --bin ${{ env.EXE_NAME }}
+
+      - name: List build artifacts (for debugging)
+        run: ls -R target/release
+        shell: bash
+
+      - name: Run application to generate artifacts
+        id: run_app
+        shell: bash
+        run: |
+          exe_path="./target/release/${{ env.EXE_NAME }}"
+          
+          if [[ ! -f "$exe_path" ]]; then
+            echo "::error::Build failed: Executable not found at $exe_path"
+            echo "::error::Please check the 'List build artifacts' step above and ensure the EXE_NAME in your workflow file matches the actual executable name."
+            exit 1
+          fi
+
+          # Safely find all .csv files and read them into an array
+          readarray -t -d '' csv_files < <(find csv -name "*.csv" -print0)
+          
+          if [[ ${#csv_files[@]} -eq 0 ]]; then
+            echo "::warning::No CSV files found in 'csv' folder. Cannot run application."
+            echo "artifacts_generated=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Running application with ${#csv_files[@]} CSV file(s)..."
+            # Execute the application, passing the file paths as arguments
+            "$exe_path" "${csv_files[@]}"
+            echo "artifacts_generated=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Zip database artifacts
+        id: zip_artifacts
+        if: steps.run_app.outputs.artifacts_generated == 'true'
+        shell: bash
+        run: |
+          # Safely find all .cdb files and read them into an array
+          readarray -t -d '' cdb_files < <(find csv -name "*.cdb" -print0)
+
+          if [[ ${#cdb_files[@]} -eq 0 ]]; then
+            echo "::warning::No .cdb files were found to zip. The release will not contain a hash_pkg.zip artifact."
+            echo "zip_created=false" >> "$GITHUB_OUTPUT"
+          else
+            # Use the zip command, which is standard on Ubuntu runners
+            zip hash_pkg.zip "${cdb_files[@]}"
+            echo "zip_created=true" >> "$GITHUB_OUTPUT"
+            echo "Successfully created hash_pkg.zip"
+          fi
+
+      - name: Increment version
+        id: version
+        uses: reecetech/version-increment@2023.9.3
+        with:
+          scheme: semver
+          increment: patch
+      
+      - name: Create GitHub Release
+        if: steps.zip_artifacts.outputs.zip_created == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          name: 'Name Database Release ${{ steps.version.outputs.version }}'
+          tag_name: ${{ steps.version.outputs.version }}
+          files: hash_pkg.zip
