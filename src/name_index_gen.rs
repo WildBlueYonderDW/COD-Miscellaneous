@@ -39,9 +39,8 @@ pub fn generate_name_index<P: AsRef<Path>>(filename: P) -> Result<(), Error> {
 /// with the same base name as the input file.
 pub fn generate_name_csv<P: AsRef<Path>>(filename: P) -> Result<(), Error> {
     // Load the binary name database from the .cdb file.
-    let mut name_index = NameDatabase::new();
     let path = filename.as_ref();
-    name_index.load(path)?;
+    let name_index = NameDatabase::load(path)?;
 
     // Determine the output path by replacing the extension with .csv.
     let output_path = path.with_extension("csv");
